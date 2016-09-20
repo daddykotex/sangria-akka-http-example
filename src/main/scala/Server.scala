@@ -42,11 +42,13 @@ object Server extends App {
 
           // query parsed successfully, time to execute it!
           case Success(queryAst) ⇒
-            complete(Executor.execute(SchemaDefinition.StarWarsSchema, queryAst, new CharacterRepo,
+            complete(Executor.execute(GraphQLSchema.schema, queryAst, ModelRepoImpl,
                 variables = vars,
-                operationName = operation,
-                deferredResolver = new FriendsResolver)
-              .map(OK → _)
+                operationName = operation)
+              .map { res =>
+
+                OK → res
+              }
               .recover {
                 case error: QueryAnalysisError ⇒ BadRequest → error.resolveError
                 case error: ErrorWithResolver ⇒ InternalServerError → error.resolveError

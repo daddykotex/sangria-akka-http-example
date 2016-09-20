@@ -1,109 +1,46 @@
-import sangria.schema.{DeferredResolver, Deferred}
-
 import scala.concurrent.Future
-import scala.util.Try
 
-object Episode extends Enumeration {
-  val NEWHOPE, EMPIRE, JEDI = Value
+trait ModelRepo {
+  def fetchModel(namespace: String): Future[Option[Model]]
 }
 
-trait Character {
-  def id: String
-  def name: Option[String]
-  def friends: List[String]
-  def appearsIn: List[Episode.Value]
+trait Definition {
+  def key: String
+  def displayName: String
+  def description: String
 }
 
-case class Human(
-  id: String,
-  name: Option[String],
-  friends: List[String],
-  appearsIn: List[Episode.Value],
-  homePlanet: Option[String]) extends Character
+case class Timeseries(key: String, highLevelType: String, displayName: String, description: String) extends Definition
 
-case class Droid(
-  id: String,
-  name: Option[String],
-  friends: List[String],
-  appearsIn: List[Episode.Value],
-  primaryFunction: Option[String]) extends Character
+case class ObjectAttribute(key: String, highLevelType: String, containerType: String, displayName: String, description: String) extends Definition
 
-/**
- * Instructs sangria to postpone the expansion of the friends list to the last responsible moment and then batch
- * all collected defers together.
- */
-case class DeferFriends(friends: List[String]) extends Deferred[List[Option[Character]]]
+case class Model(namespace: String, timeseries: List[Timeseries], objectAttributes: List[ObjectAttribute])
 
-/**
- * Resolves the lists of friends collected during the query execution.
- * For this demonstration the implementation is pretty simplistic, but in real-world scenario you
- * probably want to batch all of the deferred values in one efficient fetch.
- */
-class FriendsResolver extends DeferredResolver[Any] {
-  override def resolve(deferred: Vector[Deferred[Any]], ctx: Any) = deferred map {
-    case DeferFriends(friendIds) =>
-      Future.fromTry(Try(
-        friendIds map (id => CharacterRepo.humans.find(_.id == id) orElse CharacterRepo.droids.find(_.id == id))))
-  }
-}
-
-class CharacterRepo {
-  import CharacterRepo._
-
-  def getHero(episode: Option[Episode.Value]) =
-    episode flatMap (_ => getHuman("1000")) getOrElse droids.last
-
-  def getHuman(id: String): Option[Human] = humans.find(c => c.id == id)
-
-  def getDroid(id: String): Option[Droid] = droids.find(c => c.id == id)
-}
-
-object CharacterRepo {
-  val humans = List(
-    Human(
-      id = "1000",
-      name = Some("Luke Skywalker"),
-      friends = List("1002", "1003", "2000", "2001"),
-      appearsIn = List(Episode.NEWHOPE, Episode.EMPIRE, Episode.JEDI),
-      homePlanet = Some("Tatooine")),
-    Human(
-      id = "1001",
-      name = Some("Darth Vader"),
-      friends = List("1004"),
-      appearsIn = List(Episode.NEWHOPE, Episode.EMPIRE, Episode.JEDI),
-      homePlanet = Some("Tatooine")),
-    Human(
-      id = "1002",
-      name = Some("Han Solo"),
-      friends = List("1000", "1003", "2001"),
-      appearsIn = List(Episode.NEWHOPE, Episode.EMPIRE, Episode.JEDI),
-      homePlanet = None),
-    Human(
-      id = "1003",
-      name = Some("Leia Organa"),
-      friends = List("1000", "1002", "2000", "2001"),
-      appearsIn = List(Episode.NEWHOPE, Episode.EMPIRE, Episode.JEDI),
-      homePlanet = Some("Alderaan")),
-    Human(
-      id = "1004",
-      name = Some("Wilhuff Tarkin"),
-      friends = List("1001"),
-      appearsIn = List(Episode.NEWHOPE, Episode.EMPIRE, Episode.JEDI),
-      homePlanet = None)
+object ModelRepoImpl extends ModelRepo {
+  private val models = Seq(
+    Model(
+      "buzz",
+      List(
+        Timeseries("ts1", HighLevelType.String, "dp ts 1", "desc ts1"),
+        Timeseries("temp", HighLevelType.String, "dp ts 2", "desc ts2")
+      ),
+      List(
+        ObjectAttribute("oa1", HighLevelType.Float, ContainerType.List, "oa1 dp", "oa1 desc")
+      )
+    ),
+    Model(
+      "kolombo",
+      List(
+        Timeseries("ts3", HighLevelType.String, "dp ts 1", "desc ts1"),
+        Timeseries("brand", HighLevelType.String, "dp brand", "Brand yo")
+      ),
+      List(
+        ObjectAttribute("oa1", HighLevelType.Float, ContainerType.List, "oa1 dp", "oa1 desc"),
+        ObjectAttribute("oa2", HighLevelType.Float, ContainerType.List, "oa2 dp", "oa2 desc")
+      )
+    )
   )
+  private val modelsByNamespace = models.map(model => model.namespace -> model).toMap
 
-  val droids = List(
-    Droid(
-      id = "2000",
-      name = Some("C-3PO"),
-      friends = List("1000", "1002", "1003", "2001"),
-      appearsIn = List(Episode.NEWHOPE, Episode.EMPIRE, Episode.JEDI),
-      primaryFunction = Some("Protocol")),
-    Droid(
-      id = "2001",
-      name = Some("R2-D2"),
-      friends = List("1000", "1002", "1003"),
-      appearsIn = List(Episode.NEWHOPE, Episode.EMPIRE, Episode.JEDI),
-      primaryFunction = Some("Astromech"))
-  )
+  override def fetchModel(namespace: String): Future[Option[Model]] = Future.successful(modelsByNamespace.get(namespace))
 }
